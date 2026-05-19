@@ -1,0 +1,20 @@
+competition:
+  name: large-scale-loan-repayment-modeling-challenge
+  id_column: id
+  target_column: label
+  task_type: binary_classification
+  metric: roc_auc
+  goal: maximize
+
+model:
+  algorithms:
+    - lightgbm
+  n_trials: 50
+  cv_folds: 5
+  sample_size: 50000
+
+
+output:
+  data_dir: data/
+  models_dir: models/
+  submission_file: submission.csv

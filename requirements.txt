@@ -1,0 +1,10 @@
+anthropic
+kaggle
+pandas
+numpy
+scikit-learn
+xgboost
+lightgbm
+optuna
+python-dotenv
+pyyaml
