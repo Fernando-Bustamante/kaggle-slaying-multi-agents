@@ -14,6 +14,10 @@ class DataAgent:
         os.makedirs(self.data_dir, exist_ok=True)
 
     def download_data(self) -> str:
+        train_path = os.path.join(self.data_dir, "train.csv")
+        if os.path.exists(train_path):
+            print(f"[DataAgent] Data already exists, skipping download.")
+            return self.data_dir
         competition = self.config["competition"]["name"]
         kaggle_bin = os.path.join(os.path.dirname(sys.executable), "kaggle")
         print(f"[DataAgent] Downloading data for: {competition}")
@@ -29,7 +33,9 @@ class DataAgent:
         train_path = os.path.join(self.data_dir, "train.csv")
         test_path = os.path.join(self.data_dir, "test.csv")
 
+        print(f"[DataAgent] Reading train.csv (may take a few minutes for large files)...")
         train = pd.read_csv(train_path)
+        print(f"[DataAgent] Reading test.csv...")
         test = pd.read_csv(test_path)
 
         if sample is not None and sample < len(train):

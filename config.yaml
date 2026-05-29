@@ -1,20 +1,23 @@
+# DEBUG ONLY — not used in autonomous mode.
+# When running `python main.py <competition>`, this file is ignored.
+# Only loaded when no competition name is provided (manual override for local testing).
+
 competition:
-  name: large-scale-loan-repayment-modeling-challenge
-  id_column: id
-  target_column: label
-  task_type: binary_classification
-  metric: roc_auc
-  goal: maximize
+  name:
+  id_column:
+  target_column:
+  task_type:
+  metric:
+  goal:
+  predict_type:
 
 model:
   algorithms:
-    - lightgbm
-  n_trials: 50
-  cv_folds: 5
-  sample_size: 50000
-
+  n_trials:
+  cv_folds:
+  sample_size:
 
 output:
-  data_dir: data/
-  models_dir: models/
-  submission_file: submission.csv
+  data_dir:
+  models_dir:
+  submission_file:
