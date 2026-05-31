@@ -39,6 +39,8 @@ class ConfigAgent:
 
     def _detect_predict_type(self, sample_submission: pd.DataFrame, target_col: str) -> str:
         values = sample_submission[target_col].dropna().unique()
+        if set(str(v).strip().lower() for v in values).issubset({"true", "false", "0", "1"}):
+            return "class"
         if set(values).issubset({0, 1}):
             return "class"
         return "proba"
@@ -57,6 +59,8 @@ class ConfigAgent:
         id_col = sample.columns[0]
         submission_col = sample.columns[1]
         predict_type = self._detect_predict_type(sample, submission_col)
+        raw_vals = sample[submission_col].dropna().unique()
+        bool_format = set(str(v).strip().lower() for v in raw_vals).issubset({"true", "false"})
 
         # target in train = columns in train but not in test
         train_cols = pd.read_csv(train_path, nrows=0).columns.tolist()
@@ -77,6 +81,7 @@ class ConfigAgent:
                 "metric": "accuracy" if predict_type == "class" else "roc_auc",
                 "goal": "maximize",
                 "predict_type": predict_type,
+                "bool_format": bool_format,
             },
             "model": {
                 "algorithms": ["lightgbm"],

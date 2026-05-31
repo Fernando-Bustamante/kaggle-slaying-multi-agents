@@ -92,6 +92,7 @@ def main():
 
     # Step 2: Limpa, cria features e encode no sample (para tuning)
     feature_agent = FeatureAgent(config)
+    train_sample, test = feature_agent.add_delimiter_features(train_sample, test, fit=True)
     train_sample, test = feature_agent.drop_high_cardinality(train_sample, test)
     # impute_numeric=False: numeric NaNs are filled inside each CV fold to avoid leakage
     train_sample = feature_agent.clean(train_sample, fit=True, impute_numeric=False)
@@ -125,6 +126,7 @@ def main():
     # Step 4: Treino final com todos os dados
     print("\n[ModelingAgent] Loading full dataset for final training...")
     train_full, test = data_agent.load_data(sample=None)
+    train_full, test = feature_agent.add_delimiter_features(train_full, test, fit=False)
     train_full, test = feature_agent.drop_high_cardinality(train_full, test)
     train_full = feature_agent.clean(train_full, fit=True, impute_numeric=False)
     test = feature_agent.clean(test, fit=False, impute_numeric=True)
@@ -159,7 +161,9 @@ def main():
     if task_type == "multiclass_classification":
         predictions = avg_probas.argmax(axis=1) if predict_type == "class" else avg_probas.max(axis=1)
     elif predict_type == "class":
-        predictions = (avg_probas >= 0.5).astype(int)
+        bool_format = config["competition"].get("bool_format", False)
+        predictions = (avg_probas >= 0.5)
+        predictions = predictions if bool_format else predictions.astype(int)
     elif log_transform:
         predictions = np.expm1(avg_probas)
     else:

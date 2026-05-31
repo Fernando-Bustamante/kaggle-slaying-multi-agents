@@ -13,6 +13,7 @@ class FeatureAgent:
         self._datetime_cols = []
         self._selected_features = []
         self._te_maps = {}
+        self._split_cols = {}
 
     def _extract_title(self, series: pd.Series) -> pd.Series:
         """Extract token between ', ' and '.' for name-style columns (e.g. 'Braund, Mr. Owen' -> 'Mr')."""
@@ -21,6 +22,45 @@ class FeatureAgent:
             return extracted
         # Fallback: first word
         return series.str.split().str[0]
+
+    def add_delimiter_features(self, train: pd.DataFrame, test: pd.DataFrame, fit: bool = True) -> tuple:
+        """Split structured string columns by consistent delimiters (e.g. 'B/0/P' → 3 parts)."""
+        id_col = self.config["competition"]["id_column"]
+        target_col = self.config["competition"]["target_column"]
+        skip = {id_col, target_col}
+        delimiters = ['/', '-', '_', '|', ':']
+
+        if fit:
+            self._split_cols = {}
+            for col in train.select_dtypes(include=["object"]).columns:
+                if col in skip:
+                    continue
+                best_delim, best_n_parts, best_score = None, 0, 0
+                for delim in delimiters:
+                    if not train[col].str.contains(delim, regex=False, na=False).mean() > 0.5:
+                        continue
+                    n_parts = train[col].dropna().str.split(delim).str.len()
+                    mode_n = int(n_parts.mode()[0])
+                    consistency = float((n_parts == mode_n).mean())
+                    if consistency > 0.8 and mode_n >= 2 and consistency > best_score:
+                        best_delim, best_n_parts, best_score = delim, mode_n, consistency
+
+                if best_delim is None:
+                    continue
+
+                parts = train[col].str.split(best_delim, expand=True).iloc[:, :best_n_parts]
+                if any(1 < parts[i].nunique() <= 200 for i in range(best_n_parts)):
+                    self._split_cols[col] = (best_delim, best_n_parts)
+                    print(f"[FeatureAgent] Detected delimiter '{best_delim}' in '{col}' → {best_n_parts} parts")
+
+        for col, (delim, n_parts) in self._split_cols.items():
+            for i in range(n_parts):
+                new_col = f"{col}_p{i}"
+                train[new_col] = train[col].str.split(delim).str[i].fillna("unknown")
+                if col in test.columns:
+                    test[new_col] = test[col].str.split(delim).str[i].fillna("unknown")
+
+        return train, test
 
     def drop_high_cardinality(self, train: pd.DataFrame, test: pd.DataFrame, threshold: float = 0.5) -> tuple:
         id_col = self.config["competition"]["id_column"]
