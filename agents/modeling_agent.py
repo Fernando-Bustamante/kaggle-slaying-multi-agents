@@ -98,7 +98,7 @@ class ModelingAgent:
             n_estimators=5000, learning_rate=lr, max_depth=depth,
             subsample=subsample, colsample_bytree=colsample,
             reg_alpha=reg_alpha, reg_lambda=reg_lambda,
-            random_state=seed, n_jobs=2, verbosity=0,
+            random_state=seed, n_jobs=-1, verbosity=0,
             early_stopping_rounds=100,
         )
         if self.task_type == "regression":
@@ -127,7 +127,7 @@ class ModelingAgent:
         # reuse min_child_samples as min_samples_leaf hint, scaled down for RF
         min_leaf = max(5, int(params.get("min_child_samples", 20)) // 3)
         common = dict(n_estimators=500, max_depth=max_depth, min_samples_leaf=min_leaf,
-                      random_state=seed, n_jobs=2)
+                      random_state=seed, n_jobs=-1)
         if self.task_type == "regression":
             return RandomForestRegressor(**common)
         return RandomForestClassifier(**common)
@@ -193,7 +193,7 @@ class ModelingAgent:
                 "reg_lambda": trial.suggest_float("reg_lambda", 1e-8, 10.0, log=True),
                 "random_state": 42,
                 "verbose": -1,
-                "n_jobs": 2,
+                "n_jobs": -1,
             }
             score = self._cross_validate(params, X, y)
             if not hasattr(self._pbar, "best") or score > self._pbar.best:
@@ -204,14 +204,19 @@ class ModelingAgent:
         return objective
 
     def tune(self, X, y):
-        print(f"[ModelingAgent] Tuning LightGBM (task={self.task_type}, metric={self.metric})...")
+        budget_min = self.config["model"].get("time_budget_minutes", 90)
+        # Use 45% of total budget for tuning; rest reserved for final training
+        tune_timeout = budget_min * 60 * 0.45
+        print(f"[ModelingAgent] Tuning LightGBM (task={self.task_type}, metric={self.metric}, "
+              f"max_trials={self.n_trials}, timeout={tune_timeout/60:.0f}min)...")
         self._pbar = tqdm(total=self.n_trials, desc="Optimizing LightGBM")
         study = optuna.create_study(direction="maximize")
-        study.optimize(self._objective(X, y), n_trials=self.n_trials)
+        study.optimize(self._objective(X, y), n_trials=self.n_trials, timeout=tune_timeout)
         self._pbar.close()
         self.best_score = study.best_value
-        print(f"[ModelingAgent] Best CV score (tuning sample): {self.best_score:.4f}")
-        return {**study.best_params, "random_state": 42, "verbose": -1, "n_jobs": 2}
+        actual_trials = len(study.trials)
+        print(f"[ModelingAgent] Best CV score (tuning sample): {self.best_score:.4f} after {actual_trials} trials")
+        return {**study.best_params, "random_state": 42, "verbose": -1, "n_jobs": -1}
 
     def _score_oof(self, oof_preds, y) -> float:
         if self.task_type == "regression":

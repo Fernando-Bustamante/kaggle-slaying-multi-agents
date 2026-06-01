@@ -30,7 +30,7 @@ class OrchestratorAgent:
             "data_appears_sorted_by_time": is_sorted,
         }
 
-    def _build_data_profile(self, train: pd.DataFrame, target_col: str) -> dict:
+    def _build_data_profile(self, train: pd.DataFrame, target_col: str, n_rows_total: int) -> dict:
         numeric_cols = train.select_dtypes(include=[np.number]).columns.drop(target_col, errors="ignore").tolist()
         cat_cols = train.select_dtypes(include=["object"]).columns.tolist()
         missing_pct = round(train.isnull().sum().sum() / (train.shape[0] * train.shape[1]) * 100, 2)
@@ -55,6 +55,7 @@ class OrchestratorAgent:
 
         return {
             "competition": self.competition_name,
+            "n_rows_total": n_rows_total,
             "n_rows_sample": len(train),
             "n_cols": train.shape[1],
             "n_numeric_features": len(numeric_cols),
@@ -67,18 +68,21 @@ class OrchestratorAgent:
             "data_appears_sorted_by_time": ts_info["data_appears_sorted_by_time"],
         }
 
-    def decide(self, train: pd.DataFrame, config: dict) -> dict:
+    def decide(self, train: pd.DataFrame, config: dict, actual_n_rows: int = 0) -> dict:
         target_col = config["competition"]["target_column"]
         predict_type = config["competition"].get("predict_type", "proba")
 
         print("[OrchestratorAgent] Building data profile...")
-        profile = self._build_data_profile(train, target_col)
-        print(f"[OrchestratorAgent] Profile built: {profile['n_rows_sample']} rows, {profile['n_cols']} cols")
+        profile = self._build_data_profile(train, target_col, n_rows_total=actual_n_rows or len(train))
+        print(f"[OrchestratorAgent] Profile built: {profile['n_rows_total']:,} total rows, {profile['n_cols']} cols")
 
         prompt = f"""You are an expert Kaggle data scientist. Analyze this competition dataset and decide the optimal modeling strategy.
 
 Dataset profile:
 {json.dumps(profile, indent=2)}
+
+NOTE: n_rows_sample is a 5000-row probe used only for feature profiling.
+      n_rows_total is the ACTUAL full training set size — use this for ALL size-based rules below.
 
 Detected predict_type from sample_submission: "{predict_type}"
   - "class" means the submission expects integer labels (0/1)
@@ -86,51 +90,60 @@ Detected predict_type from sample_submission: "{predict_type}"
 
 Your task: decide the best modeling strategy for this competition.
 
-SIZE-BASED RULES (apply strictly based on n_rows_sample):
+SIZE-BASED RULES (apply strictly based on n_rows_total):
 
-SMALL dataset (n_rows < 2000):
+SMALL dataset (n_rows_total < 2000):
   - algorithm: "diverse"  ← MANDATORY. Blends LightGBM + RandomForest + LogisticRegression.
-    LightGBM alone memorizes small datasets; diverse models reduce variance.
-  - n_trials: 10-15 (fewer trials avoid meta-overfitting to CV splits)
-  - cv_folds: 10 (maximize validation signal from limited data)
-  - max_num_leaves: 15-25 (very shallow trees only)
-  - min_child_samples_min: max(30, n_rows // 25)  (strong leaf regularization)
-  - n_ensemble_models: 3 (LightGBM + RF + LR)
-  - sample_size: null (always use all data)
+  - n_trials: 10-15
+  - cv_folds: 10
+  - max_num_leaves: 15-25
+  - min_child_samples_min: max(30, n_rows_total // 25)
+  - n_ensemble_models: 3
+  - sample_size: null
+  - time_budget_minutes: 30
 
-MEDIUM dataset (2000 ≤ n_rows < 20000):
-  - algorithm: "diverse"  ← preferred. Still benefits from model diversity.
+MEDIUM dataset (2000 ≤ n_rows_total < 20000):
+  - algorithm: "diverse"  ← preferred.
   - n_trials: 20-40
-  - cv_folds: 10 if n_rows < 10k, else 5
+  - cv_folds: 10 if n_rows_total < 10k, else 5
   - max_num_leaves: 31-80
   - min_child_samples_min: 20-50
   - n_ensemble_models: 3-4
   - sample_size: null
+  - time_budget_minutes: 45
 
-LARGE dataset (n_rows ≥ 20000):
-  - algorithm: "lgbm"  ← LightGBM ensemble is optimal.
-  - n_trials: 30-100 (more rows = more stable CV = more trials worth running)
-  - cv_folds: 5 if n_rows < 200k, else 3
-  - max_num_leaves: 63-300
+LARGE dataset (20000 ≤ n_rows_total < 200000):
+  - algorithm: "lgbm"  ← LightGBM ensemble only. Do NOT use diverse — RF/LR are too slow on large data.
+  - n_trials: 30-50
+  - cv_folds: 5
+  - max_num_leaves: 63-200
   - min_child_samples_min: 10-30
-  - n_ensemble_models: 4-5
-  - sample_size: null if n_rows ≤ 50k, else 50000-100000
+  - n_ensemble_models: 3-5
+  - sample_size: null if n_rows_total ≤ 50k, else min(50000, n_rows_total // 4)
+  - time_budget_minutes: 90
+
+VERY LARGE dataset (n_rows_total ≥ 200000):
+  - algorithm: "lgbm"
+  - n_trials: 20-30 (stable CV with huge data means fewer trials needed)
+  - cv_folds: 3
+  - max_num_leaves: 63-300
+  - min_child_samples_min: 10-20
+  - n_ensemble_models: 3
+  - sample_size: 50000
+  - time_budget_minutes: 120
 
 OTHER RULES:
 - task_type: infer from target distribution. 2 unique values = binary_classification. >2 discrete = multiclass_classification. continuous = regression.
 - metric: roc_auc for binary_classification, accuracy or logloss for multiclass, rmse or mae for regression.
 - feature_selection_pct: fraction of features to keep (0.05 to 1.0).
-  * n_numeric_features > 100 AND n_rows > 10x n_numeric_features: set 1.0 — wide curated datasets (e.g. Santander) have signal in ALL features; reduction hurts.
-  * n_numeric_features > n_rows (more features than rows): set 0.1-0.3 — aggressive reduction needed.
+  * n_numeric_features > 100 AND n_rows_total > 10x n_numeric_features: set 1.0
+  * n_numeric_features > n_rows_total: set 0.1-0.3
   * Otherwise: 0.5-0.8.
 
 TIME-SERIES RULES:
 - is_timeseries: true if data_appears_sorted_by_time=true OR timeseries_candidate_cols is non-empty AND
-  the column names strongly suggest a temporal ordering (date, timestamp, created_at, etc.).
-- If is_timeseries=true: the system will use TimeSeriesSplit (no shuffling). Shuffled CV leaks future
-  into past, inflating the OOF score while destroying the leaderboard score. Do NOT set shuffle-based
-  folds for time-series data.
-- For time-series: prefer cv_folds=5, n_trials on the lower end (fewer splits = noisier CV).
+  the column names strongly suggest temporal ordering.
+- For time-series: prefer cv_folds=5, n_trials on the lower end.
 
 Respond ONLY with a valid JSON object using exactly these keys:
 {{
@@ -145,6 +158,7 @@ Respond ONLY with a valid JSON object using exactly these keys:
   "max_num_leaves": <int>,
   "min_child_samples_min": <int>,
   "is_timeseries": true or false,
+  "time_budget_minutes": <int>,
   "feature_hints": ["...", "..."],
   "reasoning": "..."
 }}"""
@@ -167,7 +181,7 @@ Respond ONLY with a valid JSON object using exactly these keys:
         print(
             f"[OrchestratorAgent] task={decisions['task_type']} | metric={decisions['metric']} "
             f"| trials={decisions['n_trials']} | folds={decisions['cv_folds']} | sample={decisions['sample_size']} "
-            f"| timeseries={decisions.get('is_timeseries', False)}"
+            f"| budget={decisions.get('time_budget_minutes', 90)}min | timeseries={decisions.get('is_timeseries', False)}"
         )
         if decisions.get("feature_hints"):
             for hint in decisions["feature_hints"]:

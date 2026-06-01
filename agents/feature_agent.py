@@ -35,6 +35,9 @@ class FeatureAgent:
             for col in train.select_dtypes(include=["object"]).columns:
                 if col in skip:
                     continue
+                # skip columns whose values are actually booleans stored as object
+                if train[col].dropna().map(type).eq(bool).any():
+                    continue
                 best_delim, best_n_parts, best_score = None, 0, 0
                 for delim in delimiters:
                     if not train[col].str.contains(delim, regex=False, na=False).mean() > 0.5:

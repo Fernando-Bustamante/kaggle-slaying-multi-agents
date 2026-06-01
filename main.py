@@ -30,9 +30,15 @@ def main():
 
         # Orchestrator lê os dados e usa Claude para decidir a estratégia
         data_dir = config["output"]["data_dir"]
+
+        # Count actual rows efficiently so orchestrator knows the true dataset size
+        with open(f"{data_dir}train.csv", "rb") as _f:
+            actual_n_rows = sum(1 for _ in _f) - 1  # subtract header
+        print(f"[main] Actual training set size: {actual_n_rows:,} rows")
+
         probe = pd.read_csv(f"{data_dir}train.csv", nrows=5000)
         orchestrator = OrchestratorAgent(competition_name)
-        decisions = orchestrator.decide(probe, config)
+        decisions = orchestrator.decide(probe, config, actual_n_rows=actual_n_rows)
         del probe
         gc.collect()
 
@@ -52,7 +58,21 @@ def main():
         if decisions.get("min_child_samples_min") is not None:
             config["model"]["min_child_samples_min"] = int(decisions["min_child_samples_min"])
         config["model"]["algorithm"] = decisions.get("algorithm", "lgbm")
-        print(f"[main] algorithm={config['model']['algorithm']}")
+        config["model"]["time_budget_minutes"] = int(decisions.get("time_budget_minutes", 90))
+        print(f"[main] algorithm={config['model']['algorithm']} | time_budget={config['model']['time_budget_minutes']}min")
+
+        # Hard safety overrides for large datasets — prevent runaway runtimes
+        if actual_n_rows > 50_000:
+            if config["model"].get("sample_size") is None:
+                cap = min(50_000, actual_n_rows // 4)
+                config["model"]["sample_size"] = cap
+                print(f"[main] Large dataset safety: capping tuning sample to {cap:,} rows")
+            if config["model"]["cv_folds"] > 5:
+                config["model"]["cv_folds"] = 5
+                print(f"[main] Large dataset safety: capping cv_folds to 5")
+            if config["model"].get("algorithm") == "diverse":
+                config["model"]["algorithm"] = "lgbm"
+                print(f"[main] Large dataset safety: switching diverse → lgbm (diverse is for small datasets only)")
     else:
         config = load_config()
 
