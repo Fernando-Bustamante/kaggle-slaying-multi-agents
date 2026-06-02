@@ -230,12 +230,28 @@ class ModelingAgent:
         tune_timeout = budget_min * 60 * 0.45
         print(f"[ModelingAgent] Tuning LightGBM (task={self.task_type}, metric={self.metric}, "
               f"max_trials={self.n_trials}, timeout={tune_timeout/60:.0f}min)...")
+        patience = max(8, self.n_trials // 4)
+        stop_flag = [False]
+
+        def early_stop_callback(study, trial):
+            trials_since_best = trial.number - study.best_trial.number
+            if trials_since_best >= patience:
+                stop_flag[0] = True
+                study.stop()
+
         self._pbar = tqdm(total=self.n_trials, desc="Optimizing LightGBM")
         study = optuna.create_study(direction="maximize")
-        study.optimize(self._objective(X, y), n_trials=self.n_trials, timeout=tune_timeout)
+        study.optimize(
+            self._objective(X, y),
+            n_trials=self.n_trials,
+            timeout=tune_timeout,
+            callbacks=[early_stop_callback],
+        )
         self._pbar.close()
         self.best_score = study.best_value
         actual_trials = len(study.trials)
+        if stop_flag[0]:
+            print(f"[ModelingAgent] Early stopped at trial {actual_trials} (no improvement in {patience} trials)")
         print(f"[ModelingAgent] Best CV score (tuning sample): {self.best_score:.4f} after {actual_trials} trials")
         return {**study.best_params, "random_state": 42, "verbose": -1, "n_jobs": -1}
 
