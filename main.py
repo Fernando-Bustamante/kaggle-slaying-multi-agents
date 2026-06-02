@@ -195,10 +195,10 @@ def main():
         predictions = avg_probas
     submission_agent.create_submission(test_ids, predictions)
     submission_agent.submit()
-    submission_agent.check_leaderboard()
 
     scale = "log scale = RMSLE" if log_transform else "original scale"
     print(f"\n=== Done! OOF score: {modeling_agent.best_score:.4f} ({scale}) ===")
+    print(f"[main] Run 'python leaderboard.py {competition_name}' in a few minutes to see your position.")
 
 
 if __name__ == "__main__":
