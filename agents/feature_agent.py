@@ -153,8 +153,8 @@ class FeatureAgent:
         target_col = self.config["competition"]["target_column"]
         exclude = [c for c in [id_col, target_col] if c in df.columns]
         numeric_cols = df.drop(columns=exclude).select_dtypes(include=[np.number]).columns
-        if len(numeric_cols) < 10:
-            print(f"[FeatureAgent] Skipped statistical features ({len(numeric_cols)} numeric cols < 10)")
+        if len(numeric_cols) < 3:
+            print(f"[FeatureAgent] Skipped statistical features ({len(numeric_cols)} numeric cols < 3)")
             return df
         arr = df[numeric_cols].values.astype(np.float32)
         new_cols = pd.DataFrame({
