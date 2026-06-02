@@ -22,6 +22,16 @@ try:
 except ImportError:
     HAS_CAT = False
 
+try:
+    import subprocess
+    _r = subprocess.run(["nvidia-smi"], capture_output=True, timeout=5)
+    HAS_GPU = _r.returncode == 0
+except Exception:
+    HAS_GPU = False
+
+if HAS_GPU:
+    print("[ModelingAgent] GPU detected — LightGBM/XGBoost/CatBoost will use GPU acceleration")
+
 optuna.logging.set_verbosity(optuna.logging.WARNING)
 
 
@@ -83,6 +93,9 @@ class ModelingAgent:
 
     def _make_lgb(self, params, seed):
         p = {**params, "random_state": seed}
+        if HAS_GPU:
+            p["device"] = "gpu"
+            p.pop("n_jobs", None)  # ignored on GPU, avoid warning
         if self.task_type == "regression":
             return lgb.LGBMRegressor(n_estimators=5000, **p)
         return lgb.LGBMClassifier(n_estimators=5000, **p)
@@ -98,9 +111,14 @@ class ModelingAgent:
             n_estimators=5000, learning_rate=lr, max_depth=depth,
             subsample=subsample, colsample_bytree=colsample,
             reg_alpha=reg_alpha, reg_lambda=reg_lambda,
-            random_state=seed, n_jobs=-1, verbosity=0,
+            random_state=seed, verbosity=0,
             early_stopping_rounds=100,
         )
+        if HAS_GPU:
+            common["tree_method"] = "hist"
+            common["device"] = "cuda"
+        else:
+            common["n_jobs"] = -1
         if self.task_type == "regression":
             return xgb.XGBRegressor(**common)
         if self.task_type == "multiclass_classification":
@@ -116,6 +134,8 @@ class ModelingAgent:
             l2_leaf_reg=l2, random_seed=seed,
             verbose=False, early_stopping_rounds=100,
         )
+        if HAS_GPU:
+            common["task_type"] = "GPU"
         if self.task_type == "regression":
             return cb.CatBoostRegressor(**common)
         if self.task_type == "multiclass_classification":
