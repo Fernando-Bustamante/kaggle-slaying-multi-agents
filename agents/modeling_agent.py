@@ -159,7 +159,7 @@ class ModelingAgent:
             return Pipeline([("sc", StandardScaler()), ("lr", Ridge(alpha=1.0))])
         return Pipeline([
             ("sc", StandardScaler()),
-            ("lr", LogisticRegression(C=1.0, max_iter=2000, random_state=seed, n_jobs=2, solver="lbfgs")),
+            ("lr", LogisticRegression(C=1.0, max_iter=2000, random_state=seed, solver="lbfgs")),
         ])
 
     def _fit_model(self, model, X_tr, y_tr, X_val, y_val):
