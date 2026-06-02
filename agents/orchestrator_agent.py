@@ -16,7 +16,7 @@ class OrchestratorAgent:
         for col in train.columns:
             if col == target_col:
                 continue
-            parsed = pd.to_datetime(train[col], errors="coerce")
+            parsed = pd.to_datetime(train[col], errors="coerce", format="mixed")
             if parsed.notna().mean() > 0.5:
                 col_l = col.lower()
                 if any(k in col_l for k in ts_keywords) or parsed.notna().mean() > 0.8:

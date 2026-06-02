@@ -152,7 +152,7 @@ class FeatureAgent:
             for col in df.select_dtypes(include=["object"]).columns:
                 if col in exclude:
                     continue
-                parsed = pd.to_datetime(df[col], errors="coerce")
+                parsed = pd.to_datetime(df[col], errors="coerce", format="mixed")
                 if parsed.notna().mean() > 0.5:
                     self._datetime_cols.append(col)
 
@@ -162,7 +162,7 @@ class FeatureAgent:
         for col in self._datetime_cols:
             if col not in df.columns:
                 continue
-            parsed = pd.to_datetime(df[col], errors="coerce")
+            parsed = pd.to_datetime(df[col], errors="coerce", format="mixed")
             df[f"{col}_year"]       = parsed.dt.year.astype(float).astype(np.float32)
             df[f"{col}_month"]      = parsed.dt.month.astype(float).astype(np.float32)
             df[f"{col}_day"]        = parsed.dt.day.astype(float).astype(np.float32)
