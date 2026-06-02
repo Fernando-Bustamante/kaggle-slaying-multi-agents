@@ -85,11 +85,9 @@ class SubmissionAgent:
                     sc = score_col[0]
                     position = int((lb_df[sc] >= best_score).sum()) + 1
                     top_pct = round(position / total * 100, 1)
-                    medal = "✅ TOP 20%" if top_pct <= 20 else "❌ not top 20% yet"
                     print(f"\n{sep}")
-                    print(f"  YOUR POSITION : {position} / {total}")
+                    print(f"  YOUR POSITION : {position} / {total}  (top {top_pct}%)")
                     print(f"  YOUR SCORE    : {best_score:.5f}")
-                    print(f"  PERCENTILE    : top {top_pct}%  {medal}")
                     print(f"{sep}\n")
                 else:
                     print(f"  Total participants: {total}")
