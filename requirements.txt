@@ -9,3 +9,4 @@ catboost
 optuna
 python-dotenv
 pyyaml
+rich
