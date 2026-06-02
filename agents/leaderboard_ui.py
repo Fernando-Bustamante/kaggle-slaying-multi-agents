@@ -1,6 +1,8 @@
 import subprocess
+import tempfile
+import zipfile
+import os
 from io import StringIO
-from datetime import datetime
 
 import pandas as pd
 from rich.console import Console
@@ -48,18 +50,23 @@ def _fetch_submissions(competition: str, kaggle_bin: str) -> list[dict]:
 
 
 def _fetch_leaderboard(competition: str, kaggle_bin: str) -> pd.DataFrame | None:
-    result = subprocess.run(
-        [kaggle_bin, "competitions", "leaderboard", "-c", competition, "--show", "--csv"],
-        capture_output=True, text=True,
-    )
-    if result.returncode != 0 or not result.stdout.strip():
-        return None
-    try:
-        # Skip "Next Page Token = ..." line that kaggle CLI prepends
-        lines = [l for l in result.stdout.splitlines() if not l.startswith("Next Page Token")]
-        return pd.read_csv(StringIO("\n".join(lines)))
-    except Exception:
-        return None
+    with tempfile.TemporaryDirectory() as tmpdir:
+        result = subprocess.run(
+            [kaggle_bin, "competitions", "leaderboard", "-c", competition,
+             "--download", "-p", tmpdir],
+            capture_output=True, text=True,
+        )
+        if result.returncode != 0:
+            return None
+        try:
+            zip_path = os.path.join(tmpdir, f"{competition}.zip")
+            with zipfile.ZipFile(zip_path, "r") as z:
+                csv_name = next(n for n in z.namelist() if n.endswith(".csv"))
+                with z.open(csv_name) as f:
+                    content = f.read().decode("utf-8-sig")
+            return pd.read_csv(StringIO(content))
+        except Exception:
+            return None
 
 
 def _score_bar(score: float, max_score: float, width: int = 24) -> str:
@@ -85,7 +92,12 @@ def show_leaderboard(competition: str, kaggle_bin: str) -> None:
         total = len(lb_df)
         score_col = next((c for c in lb_df.columns if "score" in c.lower()), None)
         if score_col:
-            position = int((lb_df[score_col] >= best_score).sum()) + 1
+            rank_col = next((c for c in lb_df.columns if c.lower() == "rank"), None)
+            if rank_col:
+                above = lb_df[lb_df[score_col] >= best_score]
+                position = int(above[rank_col].max()) + 1 if not above.empty else total + 1
+            else:
+                position = int((lb_df[score_col] >= best_score).sum()) + 1
             top_pct = round(position / total * 100, 1)
 
             pos_table = Table(box=box.ROUNDED, show_header=False, padding=(0, 2))
