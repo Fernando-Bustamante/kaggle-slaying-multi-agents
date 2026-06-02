@@ -55,7 +55,9 @@ def _fetch_leaderboard(competition: str, kaggle_bin: str) -> pd.DataFrame | None
     if result.returncode != 0 or not result.stdout.strip():
         return None
     try:
-        return pd.read_csv(StringIO(result.stdout))
+        # Skip "Next Page Token = ..." line that kaggle CLI prepends
+        lines = [l for l in result.stdout.splitlines() if not l.startswith("Next Page Token")]
+        return pd.read_csv(StringIO("\n".join(lines)))
     except Exception:
         return None
 
