@@ -208,20 +208,19 @@ class FeatureAgent:
         if len(num_cols) > 20:
             return train, test
 
-        added = 0
+        new_train, new_test = {}, {}
         for i in range(len(num_cols)):
             for j in range(i + 1, len(num_cols)):
                 c1, c2 = num_cols[i], num_cols[j]
-                ratio_col = f"{c1}_div_{c2}"
-                prod_col  = f"{c1}_x_{c2}"
-                train[ratio_col] = (train[c1] / train[c2].replace(0, np.nan)).astype(np.float32)
-                test[ratio_col]  = (test[c1]  / test[c2].replace(0, np.nan)).astype(np.float32)
-                train[prod_col]  = (train[c1] * train[c2]).astype(np.float32)
-                test[prod_col]   = (test[c1]  * test[c2]).astype(np.float32)
-                added += 2
+                new_train[f"{c1}_div_{c2}"] = (train[c1] / train[c2].replace(0, np.nan)).astype(np.float32)
+                new_test[f"{c1}_div_{c2}"]  = (test[c1]  / test[c2].replace(0, np.nan)).astype(np.float32)
+                new_train[f"{c1}_x_{c2}"]   = (train[c1] * train[c2]).astype(np.float32)
+                new_test[f"{c1}_x_{c2}"]    = (test[c1]  * test[c2]).astype(np.float32)
 
-        if added:
-            print(f"[FeatureAgent] Added {added} interaction features ({len(num_cols)} numeric cols)")
+        if new_train:
+            train = pd.concat([train, pd.DataFrame(new_train, index=train.index)], axis=1)
+            test  = pd.concat([test,  pd.DataFrame(new_test,  index=test.index)],  axis=1)
+            print(f"[FeatureAgent] Added {len(new_train)} interaction features ({len(num_cols)} numeric cols)")
 
         # Sum-of-members feature: columns whose names suggest family/group counts: columns whose names suggest family/group counts
         group_cols = [c for c in num_cols if any(k in c.lower() for k in ("sib", "parch", "family", "member", "group", "count"))]
