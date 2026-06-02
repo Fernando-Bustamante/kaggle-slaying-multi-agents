@@ -117,10 +117,12 @@ def main():
     # impute_numeric=False: numeric NaNs are filled inside each CV fold to avoid leakage
     train_sample = feature_agent.clean(train_sample, fit=True, impute_numeric=False)
     test = feature_agent.clean(test, fit=False, impute_numeric=True)  # test gets full imputation for inference
-    train_sample = feature_agent.add_datetime_features(train_sample, fit=True)
-    test = feature_agent.add_datetime_features(test, fit=False)
     train_sample = feature_agent.add_statistical_features(train_sample)
     test = feature_agent.add_statistical_features(test)
+    train_sample = feature_agent.log_transform_skewed_features(train_sample, fit=True)
+    test = feature_agent.log_transform_skewed_features(test, fit=False)
+    train_sample = feature_agent.add_datetime_features(train_sample, fit=True)
+    test = feature_agent.add_datetime_features(test, fit=False)
     train_sample, test = feature_agent.add_target_encoding(train_sample, test)
     train_sample, test = feature_agent.encode(train_sample, test)
     train_sample, test = feature_agent.add_interaction_features(train_sample, test)
@@ -150,10 +152,12 @@ def main():
     train_full, test = feature_agent.drop_high_cardinality(train_full, test)
     train_full = feature_agent.clean(train_full, fit=True, impute_numeric=False)
     test = feature_agent.clean(test, fit=False, impute_numeric=True)
-    train_full = feature_agent.add_datetime_features(train_full, fit=True)
-    test = feature_agent.add_datetime_features(test, fit=False)
     train_full = feature_agent.add_statistical_features(train_full)
     test = feature_agent.add_statistical_features(test)
+    train_full = feature_agent.log_transform_skewed_features(train_full, fit=True)
+    test = feature_agent.log_transform_skewed_features(test, fit=False)
+    train_full = feature_agent.add_datetime_features(train_full, fit=True)
+    test = feature_agent.add_datetime_features(test, fit=False)
     train_full, test = feature_agent.add_target_encoding(train_full, test)
     train_full, test = feature_agent.encode(train_full, test)
     train_full, test = feature_agent.add_interaction_features(train_full, test)
@@ -182,7 +186,8 @@ def main():
         predictions = avg_probas.argmax(axis=1) if predict_type == "class" else avg_probas.max(axis=1)
     elif predict_type == "class":
         bool_format = config["competition"].get("bool_format", False)
-        predictions = (avg_probas >= 0.5)
+        threshold = modeling_agent.optimal_threshold
+        predictions = (avg_probas >= threshold)
         predictions = predictions if bool_format else predictions.astype(int)
     elif log_transform:
         predictions = np.expm1(avg_probas)

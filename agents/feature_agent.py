@@ -14,6 +14,7 @@ class FeatureAgent:
         self._selected_features = []
         self._te_maps = {}
         self._split_cols = {}
+        self._log_cols = []
 
     def _extract_title(self, series: pd.Series) -> pd.Series:
         """Extract token between ', ' and '.' for name-style columns (e.g. 'Braund, Mr. Owen' -> 'Mr')."""
@@ -109,6 +110,31 @@ class FeatureAgent:
             df[col] = pd.to_numeric(df[col], downcast='float')
         for col in df.select_dtypes(include=['int64']).columns:
             df[col] = pd.to_numeric(df[col], downcast='integer')
+
+        return df
+
+    def log_transform_skewed_features(self, df: pd.DataFrame, fit: bool = True) -> pd.DataFrame:
+        id_col = self.config["competition"]["id_column"]
+        target_col = self.config["competition"]["target_column"]
+        skip = {id_col, target_col}
+
+        if fit:
+            self._log_cols = []
+            for col in df.select_dtypes(include=[np.number]).columns:
+                if col in skip:
+                    continue
+                col_data = df[col].dropna()
+                if len(col_data) == 0:
+                    continue
+                if col_data.min() >= 0 and col_data.skew() > 1.5:
+                    self._log_cols.append(col)
+            if self._log_cols:
+                print(f"[FeatureAgent] Log1p on {len(self._log_cols)} skewed features: "
+                      f"{self._log_cols[:5]}{'...' if len(self._log_cols) > 5 else ''}")
+
+        for col in self._log_cols:
+            if col in df.columns:
+                df[col] = np.log1p(df[col].clip(lower=0))
 
         return df
 

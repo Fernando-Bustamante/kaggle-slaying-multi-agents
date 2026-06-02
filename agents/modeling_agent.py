@@ -44,6 +44,7 @@ class ModelingAgent:
         self.metric = config["competition"].get("metric", "roc_auc")
         self.algorithm = config["model"].get("algorithm", "lgbm")
         self.best_score = 0
+        self.optimal_threshold = 0.5
 
     def _get_cv(self):
         is_ts = self.config["competition"].get("is_timeseries", False)
@@ -325,4 +326,15 @@ class ModelingAgent:
         oof_final = oof_accum / n_models
         self.best_score = self._score_oof(oof_final, y)
         print(f"[ModelingAgent] OOF score (honest): {self.best_score:.4f} | {n_models} model(s) × {self.cv_folds} folds")
+
+        if self.metric == "accuracy" and self.task_type == "binary_classification":
+            thresholds = np.arange(0.3, 0.71, 0.01)
+            best_t, best_acc = 0.5, 0.0
+            for t in thresholds:
+                acc = accuracy_score(y, (oof_final >= t).astype(int))
+                if acc > best_acc:
+                    best_acc, best_t = acc, t
+            self.optimal_threshold = float(best_t)
+            print(f"[ModelingAgent] Optimal threshold: {best_t:.2f} (OOF accuracy={best_acc:.4f})")
+
         return test_accum / n_models
