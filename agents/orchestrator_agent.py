@@ -134,7 +134,10 @@ VERY LARGE dataset (n_rows_total ≥ 200000):
 
 OTHER RULES:
 - task_type: infer from target distribution. 2 unique values = binary_classification. >2 discrete = multiclass_classification. continuous = regression.
-- metric: roc_auc for binary_classification, accuracy or logloss for multiclass, rmse or mae for regression.
+- metric: use the detected predict_type to choose:
+  * predict_type="class" (submission expects 0/1 or True/False) → accuracy
+  * predict_type="proba" (submission expects probabilities) → roc_auc for binary, logloss for multiclass
+  * regression → rmse or mae
 - feature_selection_pct: fraction of features to keep (0.05 to 1.0).
   * n_numeric_features > 100 AND n_rows_total > 10x n_numeric_features: set 1.0
   * n_numeric_features > n_rows_total: set 0.1-0.3
