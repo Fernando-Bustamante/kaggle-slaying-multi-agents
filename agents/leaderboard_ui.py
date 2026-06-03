@@ -119,6 +119,9 @@ def show_leaderboard(competition: str, kaggle_bin: str) -> None:
         best_score = min(scores) if lower_better else max(scores)
 
     # ── Position table ────────────────────────────────────────────────
+    if lb_df is None:
+        console.print("[yellow]Public leaderboard unavailable — competition may have ended or be private.[/yellow]")
+
     if lb_df is not None and best_score is not None and score_col:
         total = len(lb_df)
         if lower_better:
