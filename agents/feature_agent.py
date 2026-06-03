@@ -237,6 +237,11 @@ class FeatureAgent:
         target_col = self.config["competition"]["target_column"]
         id_col = self.config["competition"]["id_column"]
         skip = {id_col, target_col}
+
+        # Target encoding requires numeric target — skip for multiclass string labels
+        if not pd.api.types.is_numeric_dtype(train[target_col]):
+            return train, test
+
         global_mean = float(train[target_col].mean())
         alpha = 10  # smoothing: pulls rare categories toward global mean
 
