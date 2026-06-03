@@ -43,6 +43,11 @@ class ConfigAgent:
             return "class"
         if set(values).issubset({0, 1}):
             return "class"
+        # String values that aren't numeric → class labels
+        try:
+            [float(v) for v in values]
+        except (ValueError, TypeError):
+            return "class"
         return "proba"
 
     def build_config(self) -> dict:
@@ -68,6 +73,14 @@ class ConfigAgent:
         extra = [c for c in train_cols if c not in test_cols and c != id_col]
         target_col = extra[0] if extra else submission_col
 
+        # Store target classes for multiclass label mapping (argmax → original label)
+        target_classes = None
+        if predict_type == "class":
+            train_sample = pd.read_csv(train_path, nrows=5000)
+            if target_col in train_sample.columns:
+                target_classes = sorted(train_sample[target_col].dropna().unique().tolist(),
+                                        key=lambda x: str(x))
+
         print(f"[ConfigAgent] ID: {id_col} | Target: {target_col} | Submission col: {submission_col} | Predict: {predict_type}")
         # OrchestratorAgent will override n_trials, cv_folds, sample_size based on data profile.
         # These are just safe placeholder defaults.
@@ -82,6 +95,7 @@ class ConfigAgent:
                 "goal": "maximize",
                 "predict_type": predict_type,
                 "bool_format": bool_format,
+                "target_classes": target_classes,
             },
             "model": {
                 "algorithms": ["lightgbm"],

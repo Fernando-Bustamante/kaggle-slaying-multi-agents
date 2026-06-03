@@ -183,7 +183,15 @@ def main():
     task_type = config["competition"].get("task_type", "binary_classification")
     predict_type = config["competition"].get("predict_type", "proba")
     if task_type == "multiclass_classification":
-        predictions = avg_probas.argmax(axis=1) if predict_type == "class" else avg_probas.max(axis=1)
+        pred_indices = avg_probas.argmax(axis=1)
+        if predict_type == "class":
+            target_classes = config["competition"].get("target_classes")
+            if target_classes:
+                predictions = np.array([target_classes[i] for i in pred_indices])
+            else:
+                predictions = pred_indices
+        else:
+            predictions = avg_probas.max(axis=1)
     elif predict_type == "class":
         bool_format = config["competition"].get("bool_format", False)
         threshold = modeling_agent.optimal_threshold
