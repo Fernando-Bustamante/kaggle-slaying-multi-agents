@@ -186,14 +186,17 @@ class ModelingAgent:
             fold_medians = X_tr[num_cols].median()
             X_tr[num_cols] = X_tr[num_cols].fillna(fold_medians)
             X_val[num_cols] = X_val[num_cols].fillna(fold_medians)
-            if self.algorithm == "diverse":
-                score = self._score_diverse_fold(params, X_tr, y_tr, X_val, y_val)
-            else:
-                model = self._make_lgb(params, seed=42)
-                self._fit_model(model, X_tr, y_tr, X_val, y_val)
-                score = self._score(model, X_val, y_val)
-                del model
-                gc.collect()
+            try:
+                if self.algorithm == "diverse":
+                    score = self._score_diverse_fold(params, X_tr, y_tr, X_val, y_val)
+                else:
+                    model = self._make_lgb(params, seed=42)
+                    self._fit_model(model, X_tr, y_tr, X_val, y_val)
+                    score = self._score(model, X_val, y_val)
+                    del model
+                    gc.collect()
+            except Exception:
+                return -np.inf
             scores.append(score)
             print(f"  fold {fold}/{self.cv_folds} score: {score:.4f}", flush=True)
         return np.mean(scores)
