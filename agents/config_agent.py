@@ -39,15 +39,25 @@ class ConfigAgent:
 
     def _detect_predict_type(self, sample_submission: pd.DataFrame, target_col: str) -> str:
         values = sample_submission[target_col].dropna().unique()
-        if set(str(v).strip().lower() for v in values).issubset({"true", "false", "0", "1"}):
+
+        # Single unique value (e.g. all zeros) → ambiguous placeholder → default proba
+        if len(values) <= 1:
+            return "proba"
+
+        # True/False boolean labels → class
+        if set(str(v).strip().lower() for v in values).issubset({"true", "false"}):
             return "class"
-        if set(values).issubset({0, 1}):
-            return "class"
+
         # String values that aren't numeric → class labels
         try:
-            [float(v) for v in values]
+            float_vals = [float(v) for v in values]
         except (ValueError, TypeError):
             return "class"
+
+        # Exactly {0, 1} with both present → class labels
+        if set(float_vals) == {0.0, 1.0}:
+            return "class"
+
         return "proba"
 
     def build_config(self) -> dict:
