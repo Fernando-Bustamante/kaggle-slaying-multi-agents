@@ -45,6 +45,7 @@ class ModelingAgent:
         self.algorithm = config["model"].get("algorithm", "lgbm")
         self.best_score = 0
         self.optimal_threshold = 0.5
+        self.scale_pos_weight = 1.0
 
     def _get_cv(self):
         is_ts = self.config["competition"].get("is_timeseries", False)
@@ -99,6 +100,8 @@ class ModelingAgent:
             p.pop("n_jobs", None)  # ignored on GPU, avoid warning
         if self.task_type == "regression":
             return lgb.LGBMRegressor(n_estimators=5000, **p)
+        if self.scale_pos_weight != 1.0:
+            p["scale_pos_weight"] = self.scale_pos_weight
         return lgb.LGBMClassifier(n_estimators=5000, **p)
 
     def _make_xgb(self, params, seed):
@@ -228,8 +231,16 @@ class ModelingAgent:
         return objective
 
     def tune(self, X, y):
+        # Auto scale_pos_weight for imbalanced binary classification
+        if self.task_type == "binary_classification":
+            n_neg = int((y == 0).sum())
+            n_pos = int((y == 1).sum())
+            if n_pos > 0 and n_neg / n_pos > 1.5:
+                self.scale_pos_weight = round(n_neg / n_pos, 4)
+                print(f"[ModelingAgent] Imbalanced dataset detected — scale_pos_weight={self.scale_pos_weight:.2f} "
+                      f"({n_neg} neg / {n_pos} pos)")
+
         budget_min = self.config["model"].get("time_budget_minutes", 90)
-        # Use 45% of total budget for tuning; rest reserved for final training
         tune_timeout = budget_min * 60 * 0.45
         print(f"[ModelingAgent] Tuning LightGBM (task={self.task_type}, metric={self.metric}, "
               f"max_trials={self.n_trials}, timeout={tune_timeout/60:.0f}min)...")
