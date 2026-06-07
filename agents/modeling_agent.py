@@ -313,10 +313,7 @@ class ModelingAgent:
 
     def train_final(self, X, y, best_params, test_features):
         n_ensemble = self.config["model"].get("n_ensemble_models", 5)
-        # Ensure min_child_samples is safe for the full dataset
-        safe_params = {**best_params}
-        safe_params["min_child_samples"] = max(best_params.get("min_child_samples", 20), 50)
-        candidates = self._build_candidates(safe_params, n_ensemble)
+        candidates = self._build_candidates(best_params, n_ensemble)
         print(f"[ModelingAgent] Training {n_ensemble} model(s) × {self.cv_folds} folds "
               f"(OOF CV, algorithm={self.algorithm})...")
 
