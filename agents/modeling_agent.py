@@ -310,7 +310,10 @@ class ModelingAgent:
 
     def train_final(self, X, y, best_params, test_features):
         n_ensemble = self.config["model"].get("n_ensemble_models", 5)
-        candidates = self._build_candidates(best_params, n_ensemble)
+        # Ensure min_child_samples is safe for the full dataset
+        safe_params = {**best_params}
+        safe_params["min_child_samples"] = max(best_params.get("min_child_samples", 20), 50)
+        candidates = self._build_candidates(safe_params, n_ensemble)
         print(f"[ModelingAgent] Training {n_ensemble} model(s) × {self.cv_folds} folds "
               f"(OOF CV, algorithm={self.algorithm})...")
 
@@ -352,6 +355,36 @@ class ModelingAgent:
                 print(f"  [{name}] done.")
             except Exception as e:
                 print(f"  [{name}] skipped: {e}")
+
+        if n_models == 0:
+            print("[ModelingAgent] All models failed — retrying with conservative defaults...")
+            fallback = {"num_leaves": 31, "min_child_samples": 100, "learning_rate": 0.05,
+                        "random_state": 42, "verbose": -1, "n_jobs": -1}
+            candidates = self._build_candidates(fallback, 1)
+            for name, factory in candidates:
+                try:
+                    model_test = np.zeros_like(test_accum)
+                    model_oof = np.zeros_like(oof_accum)
+                    split_iter = cv.split(X, y) if self.task_type != "regression" else cv.split(X)
+                    for fold, (tr_idx, val_idx) in enumerate(split_iter, 1):
+                        X_tr, X_val = X.iloc[tr_idx].copy(), X.iloc[val_idx].copy()
+                        y_tr, y_val = y.iloc[tr_idx], y.iloc[val_idx]
+                        num_cols = X_tr.select_dtypes(include=[np.number]).columns
+                        fold_medians = X_tr[num_cols].median()
+                        X_tr[num_cols] = X_tr[num_cols].fillna(fold_medians)
+                        X_val[num_cols] = X_val[num_cols].fillna(fold_medians)
+                        model = factory()
+                        self._fit_model(model, X_tr, y_tr, X_val, y_val)
+                        model_oof[val_idx] = self._predict(model, X_val)
+                        model_test += self._predict(model, test_features) / self.cv_folds
+                        del model
+                        gc.collect()
+                    test_accum += model_test
+                    oof_accum += model_oof
+                    n_models += 1
+                    print(f"  [{name}] fallback done.")
+                except Exception as e:
+                    raise RuntimeError(f"Fallback model also failed: {e}")
 
         oof_final = oof_accum / n_models
         self.best_score = self._score_oof(oof_final, y)
