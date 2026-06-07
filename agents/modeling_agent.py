@@ -95,10 +95,11 @@ class ModelingAgent:
 
     def _make_lgb(self, params, seed, force_cpu=False):
         p = {**params, "random_state": seed}
-        if HAS_GPU and not force_cpu:
+        use_gpu = HAS_GPU and not force_cpu and self.task_type != "multiclass_classification"
+        if use_gpu:
             p["device"] = "gpu"
             p.pop("n_jobs", None)  # ignored on GPU, avoid warning
-        elif force_cpu:
+        else:
             p.pop("device", None)
             p["n_jobs"] = -1
         if self.task_type == "regression":
