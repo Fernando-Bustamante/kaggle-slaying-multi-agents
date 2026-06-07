@@ -93,11 +93,14 @@ class ModelingAgent:
             return model.predict_proba(X)
         return model.predict_proba(X)[:, 1]
 
-    def _make_lgb(self, params, seed):
+    def _make_lgb(self, params, seed, force_cpu=False):
         p = {**params, "random_state": seed}
-        if HAS_GPU:
+        if HAS_GPU and not force_cpu:
             p["device"] = "gpu"
             p.pop("n_jobs", None)  # ignored on GPU, avoid warning
+        elif force_cpu:
+            p.pop("device", None)
+            p["n_jobs"] = -1
         if self.task_type == "regression":
             return lgb.LGBMRegressor(n_estimators=5000, **p)
         if self.scale_pos_weight != 1.0:
@@ -357,10 +360,10 @@ class ModelingAgent:
                 print(f"  [{name}] skipped: {e}")
 
         if n_models == 0:
-            print("[ModelingAgent] All models failed — retrying with conservative defaults...")
+            print("[ModelingAgent] All models failed with GPU — retrying with CPU + conservative defaults...")
             fallback = {"num_leaves": 31, "min_child_samples": 100, "learning_rate": 0.05,
                         "random_state": 42, "verbose": -1, "n_jobs": -1}
-            candidates = self._build_candidates(fallback, 1)
+            candidates = [("LightGBM-CPU", lambda: self._make_lgb(fallback, 42, force_cpu=True))]
             for name, factory in candidates:
                 try:
                     model_test = np.zeros_like(test_accum)
