@@ -3,6 +3,7 @@ import sys
 import subprocess
 import pandas as pd
 from dotenv import load_dotenv
+from agents.config_agent import _find_kaggle_bin
 
 load_dotenv()
 
@@ -25,7 +26,7 @@ class SubmissionAgent:
 
     def submit(self, message: str = "Automated submission by multi-agent system"):
         competition = self.config["competition"]["name"]
-        kaggle_bin = os.path.join(os.path.dirname(sys.executable), "kaggle")
+        kaggle_bin = _find_kaggle_bin()
         print(f"[SubmissionAgent] Submitting to {competition}...")
         
         
@@ -41,5 +42,5 @@ class SubmissionAgent:
     def check_leaderboard(self):
         from agents.leaderboard_ui import show_leaderboard
         competition = self.config["competition"]["name"]
-        kaggle_bin = os.path.join(os.path.dirname(sys.executable), "kaggle")
+        kaggle_bin = _find_kaggle_bin()
         show_leaderboard(competition, kaggle_bin)

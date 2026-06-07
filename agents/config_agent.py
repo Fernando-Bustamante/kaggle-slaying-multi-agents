@@ -1,7 +1,18 @@
 import os
 import sys
+import shutil
 import subprocess
 import pandas as pd
+
+
+def _find_kaggle_bin() -> str:
+    venv_path = os.path.join(os.path.dirname(sys.executable), "kaggle")
+    if os.path.isfile(venv_path):
+        return venv_path
+    system_path = shutil.which("kaggle")
+    if system_path:
+        return system_path
+    raise FileNotFoundError("kaggle CLI not found. Install with: pip install kaggle")
 
 
 class ConfigAgent:
@@ -16,7 +27,7 @@ class ConfigAgent:
         if os.path.exists(train_path):
             print(f"[ConfigAgent] Data already downloaded, skipping.")
             return
-        kaggle_bin = os.path.join(os.path.dirname(sys.executable), "kaggle")
+        kaggle_bin = _find_kaggle_bin()
         subprocess.run([
             kaggle_bin, "competitions", "download",
             "-c", self.competition_name,
