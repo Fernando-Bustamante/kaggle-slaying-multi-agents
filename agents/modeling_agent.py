@@ -231,8 +231,8 @@ class ModelingAgent:
         return objective
 
     def tune(self, X, y):
-        # Auto scale_pos_weight for imbalanced binary classification
-        if self.task_type == "binary_classification":
+        # scale_pos_weight helps F1/recall but hurts AUC — only apply for non-AUC metrics
+        if self.task_type == "binary_classification" and self.metric not in ("roc_auc", "auc"):
             n_neg = int((y == 0).sum())
             n_pos = int((y == 1).sum())
             if n_pos > 0 and n_neg / n_pos > 1.5:
