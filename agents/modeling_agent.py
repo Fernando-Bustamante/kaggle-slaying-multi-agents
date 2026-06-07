@@ -357,10 +357,12 @@ class ModelingAgent:
                 print(f"  [{name}] skipped: {e}")
 
         if n_models == 0:
-            print("[ModelingAgent] All models failed with GPU — retrying with CPU + conservative defaults...")
-            fallback = {"num_leaves": 31, "min_child_samples": 100, "learning_rate": 0.05,
-                        "random_state": 42, "verbose": -1, "n_jobs": -1}
-            candidates = [("LightGBM-CPU", lambda: self._make_lgb(fallback, 42, force_cpu=True))]
+            print("[ModelingAgent] All models failed with GPU — retrying with CPU (tuned params, num_leaves<=63)...")
+            cpu_params = {**best_params,
+                          "num_leaves": min(best_params.get("num_leaves", 31), 63),
+                          "min_child_samples": max(best_params.get("min_child_samples", 20), 50)}
+            _cp = cpu_params
+            candidates = [("LightGBM-CPU", lambda: self._make_lgb(_cp, 42, force_cpu=True))]
             for name, factory in candidates:
                 try:
                     model_test = np.zeros_like(test_accum)
