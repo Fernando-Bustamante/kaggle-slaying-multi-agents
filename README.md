@@ -67,7 +67,7 @@ Rich terminal UI showing position, score, top percentile, and submission history
 - **GPU:** Auto-detected — uses GPU for binary/regression, CPU for multiclass
 - **Interface:** Kaggle API + Rich terminal
 
-## Setup
+## Running locally (VS Code / terminal)
 
 ```bash
 git clone https://github.com/Fernando-Bustamante/kaggle-slaying-multi-agents
@@ -82,12 +82,16 @@ Configure credentials:
 echo "ANTHROPIC_API_KEY=your_key" > .env
 ```
 
-Run on any competition:
+Run:
 ```bash
-python main.py <competition-slug>
+python main.py titanic
+python main.py santander-customer-satisfaction
+
+# Check leaderboard a few minutes after submission
+python leaderboard.py titanic
 ```
 
-## Kaggle Notebook
+## Running on Kaggle Notebook
 
 ```python
 # Cell 1 — Install
