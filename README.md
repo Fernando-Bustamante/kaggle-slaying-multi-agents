@@ -1,26 +1,23 @@
 # Kaggle Slaying Multi-Agents
 
-Autonomous multi-agent system that participates in Kaggle competitions end-to-end — downloads data, detects the problem type, engineers features, tunes and trains models, submits predictions, and monitors the leaderboard — all from a single command.
+An autonomous multi-agent system that participates in Kaggle competitions end-to-end — from data acquisition to leaderboard monitoring — without human intervention.
 
-Built for the CloudWalk Nimbus Challenge.
+Built as part of the **CloudWalk Nimbus Challenge**.
 
-## Demo
-
-```bash
-python main.py titanic
-# → Downloads data, trains, submits, monitors leaderboard automatically
-```
+---
 
 ## Results
 
-| Competition | Domain | Metric | Score | Leaderboard |
-|---|---|---|---|---|
-| Titanic | Survival prediction | Accuracy | — | **Top 11%** (1,422 / 12,620) |
-| Santander Customer Satisfaction | Financial / credit | AUC | **0.83943** | Above historical winner (0.82907) |
-| Spaceship Titanic | Binary classification | Accuracy | 0.80617 | Top 29% |
-| Bank Churn (Playground s4e1) | Customer retention | AUC | — | Top 29% |
+| Competition | Domain | Score | Leaderboard |
+|---|---|---|---|
+| Titanic | Survival prediction | — | **Top 11%** (1,422 / 12,620) |
+| Santander Customer Satisfaction | Financial / credit risk | AUC 0.83943 | **Above historical winner** (0.82907) |
+| Spaceship Titanic | Binary classification | 0.80617 accuracy | Top 29% |
+| Bank Churn (Playground s4e1) | Customer retention | — | Top 29% |
 
-The system performs strongest on **tabular binary classification with financial and behavioral data** — the core domain of credit risk and fraud detection.
+The system achieves its strongest results on **tabular binary classification with financial and behavioral data** — the core domain of credit risk and fraud detection.
+
+---
 
 ## Architecture
 
@@ -30,86 +27,50 @@ Six specialized agents run sequentially, each with a single responsibility:
 ConfigAgent → OrchestratorAgent → DataAgent → FeatureAgent → ModelingAgent → SubmissionAgent
 ```
 
-| Agent | What it does |
+| Agent | Responsibility |
 |---|---|
-| **ConfigAgent** | Downloads data via Kaggle API, auto-detects `id_col`, `target_col`, `predict_type` from `sample_submission.csv` |
-| **OrchestratorAgent** | Calls Claude Haiku to analyze the dataset profile and decide the full modeling strategy: algorithm, trials, folds, metric, time budget, sample size |
-| **DataAgent** | Loads train/test CSV with optional sampling for large datasets (100k+ rows) |
-| **FeatureAgent** | Full feature engineering pipeline: missing value imputation per fold (no leakage), log1p on skewed features, target encoding with 5-fold CV, delimiter splitting, datetime extraction, pairwise interaction features, LightGBM gain-based feature selection |
-| **ModelingAgent** | Tunes LightGBM with Optuna (TPE sampler, early stopping, time budget), trains final ensemble via OOF cross-validation, searches optimal threshold for accuracy competitions |
-| **SubmissionAgent** | Generates `submission.csv` in the correct format and submits via Kaggle CLI |
+| **ConfigAgent** | Downloads competition data via Kaggle API and auto-detects problem structure from `sample_submission.csv` |
+| **OrchestratorAgent** | Calls Claude Haiku (Anthropic) to analyze the dataset profile and decide the full modeling strategy |
+| **DataAgent** | Loads train/test data with adaptive sampling for large datasets |
+| **FeatureAgent** | Full feature engineering pipeline with leak-free per-fold imputation, log1p transforms, target encoding, interaction features, and LightGBM-based selection |
+| **ModelingAgent** | Tunes LightGBM with Optuna (TPE sampler, early stopping, time budget), trains final OOF ensemble, searches optimal classification threshold |
+| **SubmissionAgent** | Generates the submission file in the correct format and submits via Kaggle API |
 
-### Intelligence layer
+### Intelligence layer — OrchestratorAgent
 
-The **OrchestratorAgent** uses Claude to make all key decisions dynamically:
+The OrchestratorAgent uses Claude to make all key decisions dynamically based on the dataset profile:
 
-- Dataset size classification (small / medium / large / very large)
-- Algorithm selection (LightGBM ensemble vs diverse ensemble)
-- Cross-validation strategy (StratifiedKFold vs TimeSeriesSplit)
-- Hyperparameter search budget
+- Dataset size classification → algorithm selection and sampling strategy
+- Task type detection → metric, CV strategy (StratifiedKFold vs TimeSeriesSplit)
+- Hyperparameter search budget → trials, folds, time limit
 - Feature selection aggressiveness
 
-This means the system adapts automatically to any tabular competition without manual configuration.
+This allows the system to adapt to any tabular competition without manual configuration.
 
 ### Leaderboard monitoring
 
-```bash
-python leaderboard.py <competition-name>
-```
+A dedicated terminal UI fetches the full public leaderboard, computes the user's real-time position and top percentile, and displays submission history with score progression bars.
 
-Rich terminal UI showing position, score, top percentile, and submission history with score bars. Downloads the full public leaderboard to compute accurate rankings.
+---
 
 ## Stack
 
-- **Models:** LightGBM, XGBoost, CatBoost, RandomForest, LogisticRegression
-- **Tuning:** Optuna (TPE sampler, early stopping, timeout budget)
+- **Models:** LightGBM · XGBoost · CatBoost · RandomForest · LogisticRegression
+- **Tuning:** Optuna (TPE sampler, early stopping, timeout)
 - **Orchestration:** Claude Haiku via Anthropic API
-- **GPU:** Auto-detected — uses GPU for binary/regression, CPU for multiclass
-- **Interface:** Kaggle API + Rich terminal
+- **Acceleration:** GPU auto-detected and used when available
+- **Interface:** Kaggle API · Rich terminal
 
-## Running locally (VS Code / terminal)
+---
+
+## Usage
 
 ```bash
-git clone https://github.com/Fernando-Bustamante/kaggle-slaying-multi-agents
-cd kaggle-slaying-multi-agents
-pip install -r requirements.txt
+# Run on any Kaggle competition
+python main.py <competition-slug>
+
+# Check leaderboard position (a few minutes after submission)
+python leaderboard.py <competition-slug>
 ```
 
-Configure credentials:
-```bash
-# Kaggle API — place at ~/.kaggle/kaggle.json
-# Anthropic API key
-echo "ANTHROPIC_API_KEY=your_key" > .env
-```
-
-Run:
-```bash
-python main.py titanic
-python main.py santander-customer-satisfaction
-
-# Check leaderboard a few minutes after submission
-python leaderboard.py titanic
-```
-
-## Running on Kaggle Notebook
-
-```python
-# Cell 1 — Install
-!pip install anthropic optuna lightgbm xgboost catboost python-dotenv pyyaml rich -q
-
-# Cell 2 — Clone/update
-import os, subprocess
-os.chdir("/kaggle/working")
-if not os.path.exists("kaggle-slaying-multi-agents"):
-    subprocess.run(["git", "clone", "https://github.com/Fernando-Bustamante/kaggle-slaying-multi-agents"], check=True)
-else:
-    subprocess.run(["git", "-C", "kaggle-slaying-multi-agents", "pull"], check=True)
-os.chdir("/kaggle/working/kaggle-slaying-multi-agents")
-
-# Cell 3 — API key
-from kaggle_secrets import UserSecretsClient
-os.environ["ANTHROPIC_API_KEY"] = UserSecretsClient().get_secret("Anthropic")
-
-# Cell 4 — Run
-!python main.py <competition-slug>
-```
+Requires a Kaggle API key (`~/.kaggle/kaggle.json`) and an Anthropic API key (`.env`).
