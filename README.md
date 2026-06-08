@@ -1,88 +1,111 @@
 # Kaggle Slaying Multi-Agents
 
-Autonomous multi-agent system that participates in Kaggle competitions end-to-end: downloads data, detects the problem type, engineers features, tunes and trains models, submits predictions, and monitors the leaderboard — all from a single command.
+Autonomous multi-agent system that participates in Kaggle competitions end-to-end — downloads data, detects the problem type, engineers features, tunes and trains models, submits predictions, and monitors the leaderboard — all from a single command.
 
-## Usage
+Built for the CloudWalk Nimbus Challenge.
 
-```bash
-# Run on any competition
-python main.py <competition-name>
+## Demo
 
-# Check leaderboard (run a few minutes after submission)
-python leaderboard.py <competition-name>
-```
-
-**Examples:**
 ```bash
 python main.py titanic
-python main.py spaceship-titanic
-python main.py santander-customer-satisfaction
+# → Downloads data, trains, submits, monitors leaderboard automatically
 ```
 
 ## Results
 
-| Competition | Type | Score | Result |
-|---|---|---|---|
-| Titanic | Binary classification | — | **Top 11%** |
-| Spaceship Titanic | Binary classification | 0.80617 accuracy | Top 29% |
-| Bank Churn (s4e1) | Binary classification | — | Top 29% |
-| House Prices | Regression | 0.13335 RMSE | Top 46% |
-| Santander Customer Satisfaction | Binary classification (financial) | 0.83943 AUC | Above historical winner (0.82907) |
+| Competition | Domain | Metric | Score | Leaderboard |
+|---|---|---|---|---|
+| Titanic | Survival prediction | Accuracy | — | **Top 11%** (1,422 / 12,620) |
+| Santander Customer Satisfaction | Financial / credit | AUC | **0.83943** | Above historical winner (0.82907) |
+| Spaceship Titanic | Binary classification | Accuracy | 0.80617 | Top 29% |
+| Bank Churn (Playground s4e1) | Customer retention | AUC | — | Top 29% |
+
+The system performs strongest on **tabular binary classification with financial and behavioral data** — the core domain of credit risk and fraud detection.
 
 ## Architecture
 
-The system is composed of 6 specialized agents that run sequentially:
+Six specialized agents run sequentially, each with a single responsibility:
 
 ```
 ConfigAgent → OrchestratorAgent → DataAgent → FeatureAgent → ModelingAgent → SubmissionAgent
 ```
 
-### Agents
-
-| Agent | Responsibility |
+| Agent | What it does |
 |---|---|
-| **ConfigAgent** | Downloads competition data, detects `id_col`, `target_col`, `predict_type` from `sample_submission.csv` |
-| **OrchestratorAgent** | Calls Claude API to analyze the dataset profile and decide modeling strategy (`algorithm`, `n_trials`, `cv_folds`, `metric`, `time_budget`) |
-| **DataAgent** | Loads train/test data with optional sampling for large datasets |
-| **FeatureAgent** | Cleans data, applies log1p on skewed features, target encoding, datetime extraction, interaction features, and LightGBM-based feature selection |
-| **ModelingAgent** | Tunes LightGBM hyperparameters with Optuna (early stopping), trains final ensemble with OOF cross-validation, searches optimal classification threshold |
-| **SubmissionAgent** | Generates `submission.csv` and submits via Kaggle CLI |
+| **ConfigAgent** | Downloads data via Kaggle API, auto-detects `id_col`, `target_col`, `predict_type` from `sample_submission.csv` |
+| **OrchestratorAgent** | Calls Claude Haiku to analyze the dataset profile and decide the full modeling strategy: algorithm, trials, folds, metric, time budget, sample size |
+| **DataAgent** | Loads train/test CSV with optional sampling for large datasets (100k+ rows) |
+| **FeatureAgent** | Full feature engineering pipeline: missing value imputation per fold (no leakage), log1p on skewed features, target encoding with 5-fold CV, delimiter splitting, datetime extraction, pairwise interaction features, LightGBM gain-based feature selection |
+| **ModelingAgent** | Tunes LightGBM with Optuna (TPE sampler, early stopping, time budget), trains final ensemble via OOF cross-validation, searches optimal threshold for accuracy competitions |
+| **SubmissionAgent** | Generates `submission.csv` in the correct format and submits via Kaggle CLI |
 
-### Leaderboard UI
+### Intelligence layer
+
+The **OrchestratorAgent** uses Claude to make all key decisions dynamically:
+
+- Dataset size classification (small / medium / large / very large)
+- Algorithm selection (LightGBM ensemble vs diverse ensemble)
+- Cross-validation strategy (StratifiedKFold vs TimeSeriesSplit)
+- Hyperparameter search budget
+- Feature selection aggressiveness
+
+This means the system adapts automatically to any tabular competition without manual configuration.
+
+### Leaderboard monitoring
 
 ```bash
 python leaderboard.py <competition-name>
 ```
 
-Displays a rich terminal interface showing your current position, score, top percentile, and submission history with score bars.
+Rich terminal UI showing position, score, top percentile, and submission history with score bars. Downloads the full public leaderboard to compute accurate rankings.
 
 ## Stack
 
 - **Models:** LightGBM, XGBoost, CatBoost, RandomForest, LogisticRegression
-- **Tuning:** Optuna with TPE sampler and early stopping
-- **Orchestration:** Claude Haiku (Anthropic API)
-- **GPU:** Auto-detected — uses GPU acceleration when available (Kaggle notebooks)
-- **CLI:** Kaggle API
+- **Tuning:** Optuna (TPE sampler, early stopping, timeout budget)
+- **Orchestration:** Claude Haiku via Anthropic API
+- **GPU:** Auto-detected — uses GPU for binary/regression, CPU for multiclass
+- **Interface:** Kaggle API + Rich terminal
 
 ## Setup
 
 ```bash
-# Clone and install dependencies
 git clone https://github.com/Fernando-Bustamante/kaggle-slaying-multi-agents
 cd kaggle-slaying-multi-agents
 pip install -r requirements.txt
+```
 
-# Configure Kaggle API credentials
-# Place kaggle.json at ~/.kaggle/kaggle.json
-
-# Configure Anthropic API key
+Configure credentials:
+```bash
+# Kaggle API — place at ~/.kaggle/kaggle.json
+# Anthropic API key
 echo "ANTHROPIC_API_KEY=your_key" > .env
 ```
 
-## How It Works
+Run on any competition:
+```bash
+python main.py <competition-slug>
+```
 
-1. **ConfigAgent** reads `sample_submission.csv` to auto-detect the prediction format (probabilities vs class labels, boolean format)
-2. **OrchestratorAgent** profiles the dataset (row count, feature types, target distribution) and calls Claude to decide the optimal strategy — algorithm choice, number of trials, cross-validation folds, time budget
-3. **FeatureAgent** runs a full feature engineering pipeline: missing value imputation per fold (no leakage), log1p on skewed distributions, target encoding with 5-fold CV, datetime extraction, pairwise interaction features, and LightGBM gain-based feature selection
-4. **ModelingAgent** tunes LightGBM hyperparameters using Optuna on a sample, then trains the final ensemble on full data with honest OOF cross-validation. For accuracy competitions, searches the optimal classification threshold on OOF predictions
-5. **SubmissionAgent** generates the submission file in the correct format and submits via Kaggle CLI
+## Kaggle Notebook
+
+```python
+# Cell 1 — Install
+!pip install anthropic optuna lightgbm xgboost catboost python-dotenv pyyaml rich -q
+
+# Cell 2 — Clone/update
+import os, subprocess
+os.chdir("/kaggle/working")
+if not os.path.exists("kaggle-slaying-multi-agents"):
+    subprocess.run(["git", "clone", "https://github.com/Fernando-Bustamante/kaggle-slaying-multi-agents"], check=True)
+else:
+    subprocess.run(["git", "-C", "kaggle-slaying-multi-agents", "pull"], check=True)
+os.chdir("/kaggle/working/kaggle-slaying-multi-agents")
+
+# Cell 3 — API key
+from kaggle_secrets import UserSecretsClient
+os.environ["ANTHROPIC_API_KEY"] = UserSecretsClient().get_secret("Anthropic")
+
+# Cell 4 — Run
+!python main.py <competition-slug>
+```
